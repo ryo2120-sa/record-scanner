@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Patient Record Composer 1.4</title>
+    <title>Patient Record Composer 1.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Icons -->
@@ -16,7 +16,6 @@
             touch-action: none;
         }
         
-        /* FIX 1.4: Don't use display:none, use opacity hack for better mobile support */
         .hidden-input {
             opacity: 0;
             position: absolute;
@@ -37,7 +36,6 @@
             -webkit-tap-highlight-color: transparent;
         }
         
-        /* Loader styles */
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #3b82f6;
@@ -63,11 +61,11 @@
 
     <!-- Sidebar / Controls -->
     <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden relative">
-        <div class="p-6 border-b border-gray-100 bg-emerald-700 text-white flex-shrink-0">
+        <div class="p-6 border-b border-gray-100 bg-purple-700 text-white flex-shrink-0">
             <h1 class="text-xl font-bold flex items-center gap-2">
-                <i data-lucide="file-stack"></i> Record Composer 1.4
+                <i data-lucide="file-stack"></i> Record Composer 1.5
             </h1>
-            <p class="text-emerald-100 text-sm mt-1">Debug Mode Enabled</p>
+            <p class="text-purple-100 text-sm mt-1">Render Debugging</p>
         </div>
 
         <div class="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
@@ -105,9 +103,9 @@
 
                 <!-- Debug Log Area -->
                 <div class="mt-4 pt-4 border-t border-gray-200">
-                    <h3 class="text-xs font-bold text-gray-400 mb-2">SYSTEM LOG (For Troubleshooting)</h3>
+                    <h3 class="text-xs font-bold text-gray-400 mb-2">SYSTEM LOG</h3>
                     <div id="debug-log" class="bg-black text-green-400 text-[10px] font-mono p-2 h-32 overflow-y-auto rounded shadow-inner whitespace-pre-wrap">
-                        > App initialized...
+                        > App 1.5 initialized...
                     </div>
                 </div>
             </div>
@@ -145,7 +143,7 @@
             <canvas id="composer-canvas"></canvas>
             
             <!-- Empty State Placeholder -->
-            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none p-4 text-center">
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none p-4 text-center bg-white z-10">
                 <i data-lucide="scan" class="w-16 h-16 mb-4 opacity-20"></i>
                 <p class="text-lg font-medium opacity-40">Take Main Photo to Start</p>
                 <p class="text-xs opacity-30 mt-2">Check log if camera fails</p>
@@ -160,18 +158,16 @@
             if(el) {
                 const time = new Date().toLocaleTimeString().split(' ')[0];
                 el.innerHTML += `\n[${time}] ${msg}`;
-                el.scrollTop = el.scrollHeight; // Auto scroll
+                el.scrollTop = el.scrollHeight; 
             }
             console.log(msg);
         }
 
-        // Global Error Handler
         window.onerror = function(message, source, lineno, colno, error) {
             log(`ERROR: ${message}`);
             alert(`App Error: ${message}`);
         };
 
-        // Initialize Icons
         try {
             lucide.createIcons();
             log("Icons loaded");
@@ -179,8 +175,6 @@
             log("Icon load failed: " + e.message);
         }
 
-        // --- Event Binding (FIX 1.4) ---
-        // We bind listeners in JS, not HTML, for better reliability
         document.addEventListener('DOMContentLoaded', () => {
             log("DOM Ready. Binding inputs...");
             
@@ -211,9 +205,10 @@
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
         
+        // Slightly reduced scale for safety on old devices
         const BASE_WIDTH = 612;
         const BASE_HEIGHT = 792;
-        const SCALE_FACTOR = 1.5;
+        const SCALE_FACTOR = 1.0; 
         
         canvas.width = BASE_WIDTH * SCALE_FACTOR;
         canvas.height = BASE_HEIGHT * SCALE_FACTOR;
@@ -226,16 +221,23 @@
             const aspect = BASE_WIDTH / BASE_HEIGHT;
             let cssWidth = maxWidth;
             let cssHeight = maxWidth / aspect;
-            if (cssHeight > maxHeight) {
+            
+            // Safety: Ensure we don't end up with 0
+            if (cssWidth < 50) cssWidth = 300;
+            if (cssHeight < 50) cssHeight = 400;
+
+            if (cssHeight > maxHeight && maxHeight > 50) {
                 cssHeight = maxHeight;
                 cssWidth = maxHeight * aspect;
             }
+            
             canvas.style.width = `${cssWidth}px`;
             canvas.style.height = `${cssHeight}px`;
+            // log(`Canvas CSS Resized: ${cssWidth}x${cssHeight}`);
         }
         
         window.addEventListener('resize', resizeCanvasCSS);
-        setTimeout(resizeCanvasCSS, 100);
+        setTimeout(resizeCanvasCSS, 500); // Late bind resize to ensure layout is done
 
         let background = null;
         let overlays = [];
@@ -244,42 +246,56 @@
         let dragStartX = 0;
         let dragStartY = 0;
 
-        // --- Render Loop ---
+        // --- Render Loop (FIX 1.5: Detailed Logging & Robustness) ---
         function render() {
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            try {
+                // log(`Render Triggered. BG exists? ${!!background}`);
+                
+                // Clear
+                ctx.fillStyle = "#FFFFFF";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            if (background) {
-                emptyState.style.display = 'none';
-                ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-            } else {
-                emptyState.style.display = 'flex';
-                ctx.strokeStyle = '#e5e7eb';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(0, 0, canvas.width, canvas.height);
-                if(!background) return; 
-            }
-
-            overlays.forEach((overlay, index) => {
-                ctx.save();
-                ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-                ctx.shadowBlur = 10;
-                ctx.shadowOffsetX = 2;
-                ctx.shadowOffsetY = 2;
-                ctx.drawImage(overlay.img, overlay.x, overlay.y, overlay.width, overlay.height);
-
-                if (index === selectedOverlayIndex) {
-                    ctx.shadowColor = "transparent";
-                    ctx.strokeStyle = "#2563eb";
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
-                    ctx.fillStyle = "#2563eb";
-                    const handleSize = 15; // Bigger touch target
-                    ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
-                    ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
+                if (background) {
+                    // FIX: Use classList to strictly hide the empty state
+                    emptyState.classList.add('hidden'); 
+                    
+                    // Draw
+                    ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+                } else {
+                    emptyState.classList.remove('hidden');
+                    ctx.strokeStyle = '#e5e7eb';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+                    return; 
                 }
-                ctx.restore();
-            });
+
+                // Overlays
+                overlays.forEach((overlay, index) => {
+                    ctx.save();
+                    ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+                    ctx.shadowBlur = 10;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
+                    ctx.drawImage(overlay.img, overlay.x, overlay.y, overlay.width, overlay.height);
+
+                    if (index === selectedOverlayIndex) {
+                        ctx.shadowColor = "transparent";
+                        ctx.strokeStyle = "#2563eb";
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
+                        
+                        // Handles
+                        ctx.fillStyle = "#2563eb";
+                        const handleSize = 15;
+                        ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
+                        ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
+                    }
+                    ctx.restore();
+                });
+            } catch (e) {
+                log(`RENDER ERROR: ${e.message}`);
+                alert(`Render Error: ${e.message}`);
+            }
         }
 
         // --- Image Handling ---
@@ -287,27 +303,21 @@
         function handleImageUpload(event, type, label = '') {
             try {
                 const files = event.target.files;
-                log(`Files detected: ${files.length}`);
-
-                if (files.length === 0) {
-                    log("User cancelled selection or no file.");
-                    return; 
-                }
+                if (files.length === 0) return;
                 
                 const file = files[0];
-                log(`File Type: ${file.type}, Size: ${(file.size/1024/1024).toFixed(2)}MB`);
+                log(`File: ${file.type} (${(file.size/1024/1024).toFixed(2)}MB)`);
 
-                loadingText.innerText = "Processing Photo...";
+                loadingText.innerText = "Processing...";
                 loadingOverlay.classList.remove('hidden');
 
                 const objectUrl = URL.createObjectURL(file);
                 
                 const img = new Image();
                 img.onload = function() {
-                    log("Image loaded into memory. Resizing...");
-                    loadingText.innerText = "Resizing...";
+                    log("Img loaded. Resizing...");
                     
-                    requestAnimationFrame(() => {
+                    setTimeout(() => { // Force async break
                         try {
                             const MAX_DIM = 1200; 
                             let w = img.width;
@@ -329,9 +339,10 @@
 
                             const optimizedImg = new Image();
                             optimizedImg.onload = function() {
-                                log("Optimized image ready. Rendering.");
+                                log("Optimized Img Ready. Calling Render...");
                                 processOptimizedImage(optimizedImg, type, label);
                                 loadingOverlay.classList.add('hidden');
+                                log("Render Complete. Loading Hidden.");
                             };
                             optimizedImg.onerror = function(e) {
                                 log("Error loading optimized image.");
@@ -343,29 +354,28 @@
                             log("Resize Error: " + err.message);
                             loadingOverlay.classList.add('hidden');
                         }
-                    });
+                    }, 50);
                 };
 
                 img.onerror = function(e) {
-                    log("Error loading raw image (Blob URL).");
+                    log("Error loading raw blob.");
                     loadingOverlay.classList.add('hidden');
-                    alert("Error loading image. Please try again.");
                 };
-
                 img.src = objectUrl;
-                
-                // Clear input
                 event.target.value = '';
 
             } catch (err) {
-                log("Upload Handler Error: " + err.message);
+                log("Upload Error: " + err.message);
                 loadingOverlay.classList.add('hidden');
             }
         }
 
         function processOptimizedImage(img, type, label) {
+            log(`Processing: ${type}`);
             if (type === 'background') {
                 background = img;
+                // Force resize before first render to ensure canvas isn't 0x0
+                resizeCanvasCSS(); 
                 render();
             } else {
                 const defaultWidth = canvas.width * 0.4;
@@ -405,7 +415,6 @@
         }
 
         // --- Interaction Logic ---
-
         function getMousePos(evt) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -484,8 +493,6 @@
                 }
             }
         }, { passive: false });
-
-        // --- Output Functions ---
 
         async function downloadPDF() {
             if (!background) {
