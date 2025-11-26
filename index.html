@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Patient Record Composer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Patient Record Composer 1.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Icons -->
@@ -44,17 +44,17 @@
 <body class="h-screen flex flex-col md:flex-row overflow-hidden">
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex flex-col items-center justify-center text-white">
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex flex-col items-center justify-center text-white px-4 text-center">
         <div class="loader mb-4"></div>
-        <p class="text-lg font-semibold">Processing Image...</p>
-        <p class="text-sm opacity-75">Please wait, this may take a moment.</p>
+        <p class="text-lg font-semibold" id="loading-text">Processing Image...</p>
+        <p class="text-sm opacity-75 mt-2">Optimizing for performance...</p>
     </div>
 
     <!-- Sidebar / Controls -->
     <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden">
-        <div class="p-6 border-b border-gray-100 bg-blue-600 text-white flex-shrink-0">
+        <div class="p-6 border-b border-gray-100 bg-blue-700 text-white flex-shrink-0">
             <h1 class="text-xl font-bold flex items-center gap-2">
-                <i data-lucide="file-stack"></i> Record Composer
+                <i data-lucide="file-stack"></i> Record Composer 1.2
             </h1>
             <p class="text-blue-100 text-sm mt-1">Combine docs & IDs into one PDF</p>
         </div>
@@ -159,19 +159,18 @@
         const ctx = canvas.getContext('2d');
         const emptyState = document.getElementById('empty-state');
         const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
         
-        // Canvas sizing (Letter size at roughly 72 DPI screen view, we scale up for PDF)
-        // 8.5 x 11 ratio
-        const BASE_WIDTH = 612;  // Standard Letter Width in points
-        const BASE_HEIGHT = 792; // Standard Letter Height in points
-        const SCALE_FACTOR = 1.5; // For better screen resolution
+        // Canvas sizing
+        const BASE_WIDTH = 612;
+        const BASE_HEIGHT = 792;
+        const SCALE_FACTOR = 1.5;
         
         canvas.width = BASE_WIDTH * SCALE_FACTOR;
         canvas.height = BASE_HEIGHT * SCALE_FACTOR;
         
         // Responsive CSS sizing
         function resizeCanvasCSS() {
-             // Basic aspect ratio maintenance
             const container = canvas.parentElement.parentElement;
             const maxWidth = container.clientWidth - 40;
             const maxHeight = container.clientHeight - 40;
@@ -191,59 +190,48 @@
         }
         
         window.addEventListener('resize', resizeCanvasCSS);
-        resizeCanvasCSS(); // Init
+        resizeCanvasCSS(); 
 
-        // State objects
-        let background = null; // The main doc
-        let overlays = [];     // Array of overlay objects: { img, x, y, width, height, label, id }
+        let background = null;
+        let overlays = [];
         let selectedOverlayIndex = -1;
         let isDragging = false;
         let dragStartX = 0;
         let dragStartY = 0;
 
-        // --- Core Functions ---
-
+        // --- Render Loop ---
         function render() {
-            // Clear canvas
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Background
             if (background) {
                 emptyState.style.display = 'none';
                 ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
             } else {
                 emptyState.style.display = 'flex';
-                // Draw a faint border if empty
                 ctx.strokeStyle = '#e5e7eb';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(0, 0, canvas.width, canvas.height);
                 return; 
             }
 
-            // Draw Overlays
             overlays.forEach((overlay, index) => {
                 ctx.save();
-                
-                // Draw Shadow for "stickers" effect
                 ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
                 ctx.shadowBlur = 10;
                 ctx.shadowOffsetX = 2;
                 ctx.shadowOffsetY = 2;
 
-                // Draw Image
                 ctx.drawImage(overlay.img, overlay.x, overlay.y, overlay.width, overlay.height);
 
-                // Draw Selection Border if selected
                 if (index === selectedOverlayIndex) {
-                    ctx.shadowColor = "transparent"; // Remove shadow for border
-                    ctx.strokeStyle = "#2563eb"; // Blue border
+                    ctx.shadowColor = "transparent";
+                    ctx.strokeStyle = "#2563eb";
                     ctx.lineWidth = 4;
                     ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
                     
-                    // Draw resize handles (visual only for now, wheel handles resize)
                     ctx.fillStyle = "#2563eb";
-                    const handleSize = 10; // Bigger for touch
+                    const handleSize = 10;
                     ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
                     ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
                 }
@@ -251,75 +239,107 @@
             });
         }
 
-        // --- Event Handlers ---
+        // --- Robust Image Handling (The Fix) ---
 
         function handleImageUpload(event, type, label = '') {
             const file = event.target.files[0];
             if (!file) return;
 
-            // Show Loading
+            // Step 1: Notify User
+            loadingText.innerText = "Reading File...";
             loadingOverlay.classList.remove('hidden');
 
             const reader = new FileReader();
             
             reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    // Hide Loading
-                    loadingOverlay.classList.add('hidden');
-                    
-                    if (type === 'background') {
-                        background = img;
-                        render();
-                    } else {
-                        // Intelligent placement logic
-                        const defaultWidth = canvas.width * 0.4;
-                        const ratio = img.height / img.width;
-                        const defaultHeight = defaultWidth * ratio;
-
-                        let startX = 20;
-                        let startY = 20;
-
-                        if (label.includes('ID')) {
-                            startX = canvas.width - defaultWidth - 40;
-                            startY = canvas.height * 0.3; 
-                        } else if (label.includes('Insurance')) {
-                            startX = canvas.width - defaultWidth - 40;
-                            startY = canvas.height * 0.7;
-                        }
-
-                        overlays.push({
-                            id: Date.now(),
-                            img: img,
-                            x: startX,
-                            y: startY,
-                            width: defaultWidth,
-                            height: defaultHeight,
-                            label: label
-                        });
-                        selectedOverlayIndex = overlays.length - 1; 
-                        updateLayerControls();
-                        render();
-                    }
-                    // Reset input so same file can be selected again if needed
-                    event.target.value = '';
-                };
+                loadingText.innerText = "Optimizing Image...";
                 
-                img.onerror = function() {
-                    loadingOverlay.classList.add('hidden');
-                    alert("Failed to load image. Please try a different photo.");
+                // Create a temp image to load the raw data
+                const rawImg = new Image();
+                
+                rawImg.onload = function() {
+                    // Step 2: Resize Logic (Crucial for Mobile Memory)
+                    const MAX_DIM = 1200; // Cap at 1200px (sufficient for documents)
+                    let w = rawImg.width;
+                    let h = rawImg.height;
+                    
+                    if (w > MAX_DIM || h > MAX_DIM) {
+                        const scale = Math.min(MAX_DIM / w, MAX_DIM / h);
+                        w = Math.floor(w * scale);
+                        h = Math.floor(h * scale);
+                    }
+
+                    // Draw to temp canvas to resize
+                    const tempCvs = document.createElement('canvas');
+                    tempCvs.width = w;
+                    tempCvs.height = h;
+                    const tempCtx = tempCvs.getContext('2d');
+                    tempCtx.drawImage(rawImg, 0, 0, w, h);
+
+                    // Step 3: Create Final Optimized Image Object
+                    const optimizedImg = new Image();
+                    optimizedImg.onload = function() {
+                        // Success!
+                        processOptimizedImage(optimizedImg, type, label);
+                        loadingOverlay.classList.add('hidden');
+                    };
+                    optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.85);
                 };
 
-                img.src = e.target.result;
+                rawImg.onerror = function() {
+                    loadingOverlay.classList.add('hidden');
+                    alert("Error: The image could not be loaded. It might be corrupted.");
+                };
+
+                rawImg.src = e.target.result;
             };
             
             reader.onerror = function() {
                 loadingOverlay.classList.add('hidden');
-                alert("Error reading file. Please try again.");
+                alert("Error: Browser could not read the file.");
             };
 
-            // Read the file
             reader.readAsDataURL(file);
+            
+            // Clear input
+            event.target.value = '';
+        }
+
+        function processOptimizedImage(img, type, label) {
+            if (type === 'background') {
+                background = img;
+                // Auto-fit background logic can be added here if needed, 
+                // but stretching to canvas (done in render) is usually what's expected for "Scan to Page"
+                render();
+            } else {
+                const defaultWidth = canvas.width * 0.4;
+                const ratio = img.height / img.width;
+                const defaultHeight = defaultWidth * ratio;
+
+                let startX = 20;
+                let startY = 20;
+
+                if (label.includes('ID')) {
+                    startX = canvas.width - defaultWidth - 40;
+                    startY = canvas.height * 0.3; 
+                } else if (label.includes('Insurance')) {
+                    startX = canvas.width - defaultWidth - 40;
+                    startY = canvas.height * 0.7;
+                }
+
+                overlays.push({
+                    id: Date.now(),
+                    img: img,
+                    x: startX,
+                    y: startY,
+                    width: defaultWidth,
+                    height: defaultHeight,
+                    label: label
+                });
+                selectedOverlayIndex = overlays.length - 1; 
+                updateLayerControls();
+                render();
+            }
         }
 
         function updateLayerControls() {
@@ -365,7 +385,6 @@
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             
-            // Handle both touch and mouse
             const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
             const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
 
@@ -376,9 +395,6 @@
         }
 
         function handleStart(e) {
-             // Prevent default only if inside canvas to prevent scrolling while dragging
-             // But we need to be careful not to block scrolling entirely on page
-            
             const pos = getMousePos(e);
             
             let clickedIndex = -1;
@@ -392,7 +408,7 @@
             }
 
             if (clickedIndex !== -1) {
-                e.preventDefault(); // Lock scroll when dragging an item
+                e.preventDefault(); 
                 selectedOverlayIndex = clickedIndex;
                 isDragging = true;
                 dragStartX = pos.x - overlays[clickedIndex].x;
@@ -400,7 +416,6 @@
                 render();
                 updateLayerControls();
             } else {
-                // Background click - don't prevent default so user can scroll page
                 selectedOverlayIndex = -1;
                 render();
                 updateLayerControls();
@@ -409,7 +424,7 @@
 
         function handleMove(e) {
             if (isDragging && selectedOverlayIndex !== -1) {
-                e.preventDefault(); // Stop scrolling while dragging
+                e.preventDefault();
                 const pos = getMousePos(e);
                 const overlay = overlays[selectedOverlayIndex];
                 overlay.x = pos.x - dragStartX;
@@ -465,9 +480,9 @@
                 return;
             }
 
+            loadingText.innerText = "Generating PDF...";
             loadingOverlay.classList.remove('hidden');
             
-            // Allow UI to update before blocking thread
             setTimeout(() => {
                 try {
                     const tempSelection = selectedOverlayIndex;
@@ -515,7 +530,6 @@
         }
 
         render();
-
     </script>
 </body>
 </html>
