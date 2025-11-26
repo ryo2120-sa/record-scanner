@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Patient Record Composer 1.2</title>
+    <title>Patient Record Composer 1.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Icons -->
@@ -47,16 +47,16 @@
     <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex flex-col items-center justify-center text-white px-4 text-center">
         <div class="loader mb-4"></div>
         <p class="text-lg font-semibold" id="loading-text">Processing Image...</p>
-        <p class="text-sm opacity-75 mt-2">Optimizing for performance...</p>
+        <p class="text-sm opacity-75 mt-2">Please wait...</p>
     </div>
 
     <!-- Sidebar / Controls -->
     <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden">
-        <div class="p-6 border-b border-gray-100 bg-blue-700 text-white flex-shrink-0">
+        <div class="p-6 border-b border-gray-100 bg-indigo-700 text-white flex-shrink-0">
             <h1 class="text-xl font-bold flex items-center gap-2">
-                <i data-lucide="file-stack"></i> Record Composer 1.2
+                <i data-lucide="file-stack"></i> Record Composer 1.3
             </h1>
-            <p class="text-blue-100 text-sm mt-1">Combine docs & IDs into one PDF</p>
+            <p class="text-indigo-100 text-sm mt-1">Faster Processing Engine</p>
         </div>
 
         <div class="flex-1 overflow-y-auto p-6 space-y-6">
@@ -71,7 +71,7 @@
                     <label for="main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 active:bg-blue-50">
                         <i data-lucide="camera" class="w-4 h-4 mr-2"></i> Take Photo
                     </label>
-                    <!-- Added capture="environment" for rear camera priority -->
+                    <!-- IMPORTANT: Using standard file input behavior for max compatibility -->
                     <input id="main-doc" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'background')">
                 </div>
 
@@ -151,6 +151,11 @@
     </div>
 
     <script>
+        // Global Error Handler to catch anything
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert("App Error: " + message);
+        };
+
         // Initialize Icons
         lucide.createIcons();
 
@@ -172,6 +177,7 @@
         // Responsive CSS sizing
         function resizeCanvasCSS() {
             const container = canvas.parentElement.parentElement;
+            if(!container) return;
             const maxWidth = container.clientWidth - 40;
             const maxHeight = container.clientHeight - 40;
             
@@ -190,7 +196,8 @@
         }
         
         window.addEventListener('resize', resizeCanvasCSS);
-        resizeCanvasCSS(); 
+        // Delay initial resize to ensure DOM is ready
+        setTimeout(resizeCanvasCSS, 100);
 
         let background = null;
         let overlays = [];
@@ -212,7 +219,8 @@
                 ctx.strokeStyle = '#e5e7eb';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(0, 0, canvas.width, canvas.height);
-                return; 
+                // Don't return here, allows other logic to run if needed, but for now we stop overlays
+                if(!background) return; 
             }
 
             overlays.forEach((overlay, index) => {
@@ -239,77 +247,90 @@
             });
         }
 
-        // --- Robust Image Handling (The Fix) ---
+        // --- 1.3 Update: High Performance Image Handling ---
 
         function handleImageUpload(event, type, label = '') {
-            const file = event.target.files[0];
-            if (!file) return;
+            try {
+                const file = event.target.files[0];
+                if (!file) {
+                    // User cancelled camera
+                    return; 
+                }
 
-            // Step 1: Notify User
-            loadingText.innerText = "Reading File...";
-            loadingOverlay.classList.remove('hidden');
+                // Immediate feedback
+                loadingText.innerText = "Processing Photo...";
+                loadingOverlay.classList.remove('hidden');
 
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                loadingText.innerText = "Optimizing Image...";
+                // METHOD 1.3: Use ObjectURL (Zero memory copy) instead of FileReader (Big memory copy)
+                const objectUrl = URL.createObjectURL(file);
                 
-                // Create a temp image to load the raw data
-                const rawImg = new Image();
-                
-                rawImg.onload = function() {
-                    // Step 2: Resize Logic (Crucial for Mobile Memory)
-                    const MAX_DIM = 1200; // Cap at 1200px (sufficient for documents)
-                    let w = rawImg.width;
-                    let h = rawImg.height;
+                const img = new Image();
+                img.onload = function() {
+                    loadingText.innerText = "Resizing...";
                     
-                    if (w > MAX_DIM || h > MAX_DIM) {
-                        const scale = Math.min(MAX_DIM / w, MAX_DIM / h);
-                        w = Math.floor(w * scale);
-                        h = Math.floor(h * scale);
-                    }
+                    // Small delay to let UI render the text change
+                    requestAnimationFrame(() => {
+                        try {
+                            // Resize Logic
+                            const MAX_DIM = 1200; 
+                            let w = img.width;
+                            let h = img.height;
+                            
+                            if (w > MAX_DIM || h > MAX_DIM) {
+                                const scale = Math.min(MAX_DIM / w, MAX_DIM / h);
+                                w = Math.floor(w * scale);
+                                h = Math.floor(h * scale);
+                            }
 
-                    // Draw to temp canvas to resize
-                    const tempCvs = document.createElement('canvas');
-                    tempCvs.width = w;
-                    tempCvs.height = h;
-                    const tempCtx = tempCvs.getContext('2d');
-                    tempCtx.drawImage(rawImg, 0, 0, w, h);
+                            const tempCvs = document.createElement('canvas');
+                            tempCvs.width = w;
+                            tempCvs.height = h;
+                            const tempCtx = tempCvs.getContext('2d');
+                            tempCtx.drawImage(img, 0, 0, w, h);
 
-                    // Step 3: Create Final Optimized Image Object
-                    const optimizedImg = new Image();
-                    optimizedImg.onload = function() {
-                        // Success!
-                        processOptimizedImage(optimizedImg, type, label);
-                        loadingOverlay.classList.add('hidden');
-                    };
-                    optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.85);
+                            // Release original high-res memory immediately
+                            URL.revokeObjectURL(objectUrl);
+
+                            // Create optimized image
+                            const optimizedImg = new Image();
+                            optimizedImg.onload = function() {
+                                processOptimizedImage(optimizedImg, type, label);
+                                loadingOverlay.classList.add('hidden');
+                            };
+                            optimizedImg.onerror = function() {
+                                alert("Failed to process optimized image.");
+                                loadingOverlay.classList.add('hidden');
+                            };
+                            
+                            // Convert to JPEG at 80% quality
+                            optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.80);
+
+                        } catch (err) {
+                            alert("Resize Error: " + err.message);
+                            loadingOverlay.classList.add('hidden');
+                        }
+                    });
                 };
 
-                rawImg.onerror = function() {
+                img.onerror = function(e) {
                     loadingOverlay.classList.add('hidden');
-                    alert("Error: The image could not be loaded. It might be corrupted.");
+                    alert("Error loading image from camera. Please try again.");
                 };
 
-                rawImg.src = e.target.result;
-            };
-            
-            reader.onerror = function() {
-                loadingOverlay.classList.add('hidden');
-                alert("Error: Browser could not read the file.");
-            };
+                img.src = objectUrl;
+                
+                // Clear input to allow retaking same photo
+                event.target.value = '';
 
-            reader.readAsDataURL(file);
-            
-            // Clear input
-            event.target.value = '';
+            } catch (err) {
+                loadingOverlay.classList.add('hidden');
+                alert("Upload Error: " + err.message);
+            }
         }
 
         function processOptimizedImage(img, type, label) {
             if (type === 'background') {
                 background = img;
-                // Auto-fit background logic can be added here if needed, 
-                // but stretching to canvas (done in render) is usually what's expected for "Scan to Page"
                 render();
             } else {
                 const defaultWidth = canvas.width * 0.4;
@@ -408,6 +429,7 @@
             }
 
             if (clickedIndex !== -1) {
+                // Prevent default ONLY if we clicked an object (stops scroll)
                 e.preventDefault(); 
                 selectedOverlayIndex = clickedIndex;
                 isDragging = true;
