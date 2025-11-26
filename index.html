@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Record Composer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .canvas-container {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            cursor: crosshair;
+            touch-action: none; /* Prevent scrolling while dragging on touch devices */
+        }
+        .control-panel {
+            transition: all 0.3s ease;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .custom-file-upload {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar / Controls -->
+    <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl">
+        <div class="p-6 border-b border-gray-100 bg-blue-600 text-white">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="file-stack"></i> Record Composer
+            </h1>
+            <p class="text-blue-100 text-sm mt-1">Combine docs & IDs into one PDF</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            <!-- Step 1: Photos -->
+            <div class="space-y-4">
+                <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">1. Take Photos</h2>
+                
+                <!-- Main Doc Upload -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Main Document (Background)</label>
+                    <label for="main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
+                        <i data-lucide="camera" class="w-4 h-4 mr-2"></i> Take Photo
+                    </label>
+                    <input id="main-doc" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'background')">
+                </div>
+
+                <!-- Overlays -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <label class="block text-xs font-medium text-gray-700 mb-2">Patient ID</label>
+                        <label for="id-card" class="custom-file-upload w-full justify-center text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100">
+                            <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap ID
+                        </label>
+                        <input id="id-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'ID Card')">
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <label class="block text-xs font-medium text-gray-700 mb-2">Insurance</label>
+                        <label for="ins-card" class="custom-file-upload w-full justify-center text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
+                            <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap Card
+                        </label>
+                        <input id="ins-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'Insurance')">
+                    </div>
+                </div>
+
+                <p class="text-xs text-gray-400 italic">
+                    Tip: Drag images on the canvas to position them. Scroll/Pinch to resize overlays.
+                </p>
+
+                <!-- Layer Controls (Dynamic) -->
+                <div id="layer-controls" class="space-y-2 hidden">
+                    <h3 class="text-xs font-semibold text-gray-500 mt-4">Active Overlays</h3>
+                    <!-- JS will populate this -->
+                </div>
+            </div>
+
+            <!-- Step 2: Details -->
+            <div class="space-y-4 pt-4 border-t border-gray-100">
+                <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">2. Recipient</h2>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email To</label>
+                    <input type="email" id="email-input" placeholder="doctor@clinic.com" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject Line</label>
+                    <input type="text" id="subject-input" value="Patient Record Scan" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="p-6 bg-gray-50 border-t border-gray-200 space-y-3">
+            <button onclick="downloadPDF()" class="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors shadow-lg">
+                <i data-lucide="download"></i> Download PDF
+            </button>
+            <button onclick="composeEmail()" class="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3 px-4 rounded-lg font-medium transition-colors">
+                <i data-lucide="mail"></i> Open Email Draft
+            </button>
+            <p class="text-[10px] text-center text-gray-400">
+                * Note: Download PDF first, then attach to email manually.
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Canvas Area -->
+    <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden">
+        <!-- Canvas wrapper to center it -->
+        <div class="relative shadow-2xl bg-white">
+            <canvas id="composer-canvas"></canvas>
+            
+            <!-- Empty State Placeholder -->
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
+                <i data-lucide="scan" class="w-16 h-16 mb-4 opacity-20"></i>
+                <p class="text-lg font-medium opacity-40">Upload Main Document to Start</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- App State ---
+        const canvas = document.getElementById('composer-canvas');
+        const ctx = canvas.getContext('2d');
+        const emptyState = document.getElementById('empty-state');
+        
+        // Canvas sizing (Letter size at roughly 72 DPI screen view, we scale up for PDF)
+        // 8.5 x 11 ratio
+        const BASE_WIDTH = 612;  // Standard Letter Width in points
+        const BASE_HEIGHT = 792; // Standard Letter Height in points
+        const SCALE_FACTOR = 1.5; // For better screen resolution
+        
+        canvas.width = BASE_WIDTH * SCALE_FACTOR;
+        canvas.height = BASE_HEIGHT * SCALE_FACTOR;
+        canvas.style.width = `${BASE_WIDTH}px`; // CSS display size
+        canvas.style.height = `${BASE_HEIGHT}px`; // CSS display size
+
+        // State objects
+        let background = null; // The main doc
+        let overlays = [];     // Array of overlay objects: { img, x, y, width, height, label, id }
+        let selectedOverlayIndex = -1;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+
+        // --- Core Functions ---
+
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Background
+            if (background) {
+                emptyState.style.display = 'none';
+                ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+            } else {
+                emptyState.style.display = 'flex';
+                // Draw a faint border if empty
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(0, 0, canvas.width, canvas.height);
+                return; // Don't draw overlays if no background (optional design choice, but safer)
+            }
+
+            // Draw Overlays
+            overlays.forEach((overlay, index) => {
+                ctx.save();
+                
+                // Draw Shadow for "stickers" effect
+                ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                // Draw Image
+                ctx.drawImage(overlay.img, overlay.x, overlay.y, overlay.width, overlay.height);
+
+                // Draw Selection Border if selected
+                if (index === selectedOverlayIndex) {
+                    ctx.shadowColor = "transparent"; // Remove shadow for border
+                    ctx.strokeStyle = "#2563eb"; // Blue border
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
+                    
+                    // Draw resize handles (visual only for now, wheel handles resize)
+                    ctx.fillStyle = "#2563eb";
+                    const handleSize = 8;
+                    ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
+                    ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
+                }
+                ctx.restore();
+            });
+        }
+
+        // --- Event Handlers ---
+
+        function handleImageUpload(event, type, label = '') {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    if (type === 'background') {
+                        background = img;
+                        render();
+                    } else {
+                        // Intelligent placement logic based on count
+                        // Default size: 40% of canvas width
+                        const defaultWidth = canvas.width * 0.4;
+                        const ratio = img.height / img.width;
+                        const defaultHeight = defaultWidth * ratio;
+
+                        let startX = 20;
+                        let startY = 20;
+
+                        // Try to place ID cards to the right, Insurance to the bottom right (mimicking example)
+                        if (label.includes('ID')) {
+                            startX = canvas.width - defaultWidth - 40;
+                            startY = canvas.height * 0.3; 
+                        } else if (label.includes('Insurance')) {
+                            startX = canvas.width - defaultWidth - 40;
+                            startY = canvas.height * 0.7;
+                        }
+
+                        overlays.push({
+                            id: Date.now(),
+                            img: img,
+                            x: startX,
+                            y: startY,
+                            width: defaultWidth,
+                            height: defaultHeight,
+                            label: label
+                        });
+                        selectedOverlayIndex = overlays.length - 1; // Select the new one
+                        updateLayerControls();
+                        render();
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateLayerControls() {
+            const container = document.getElementById('layer-controls');
+            container.innerHTML = '<h3 class="text-xs font-semibold text-gray-500 mt-4 mb-2">Overlays (Select to Resize)</h3>';
+            
+            if (overlays.length > 0) {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+
+            overlays.forEach((overlay, index) => {
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-2 rounded text-sm cursor-pointer ${index === selectedOverlayIndex ? 'bg-blue-100 border-blue-200 border' : 'bg-white border border-gray-200'}`;
+                div.innerHTML = `
+                    <span class="truncate font-medium ${index === selectedOverlayIndex ? 'text-blue-700' : 'text-gray-700'}">${overlay.label}</span>
+                    <button class="text-red-400 hover:text-red-600 p-1" onclick="removeOverlay(event, ${index})">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                `;
+                div.onclick = () => {
+                    selectedOverlayIndex = index;
+                    render();
+                    updateLayerControls();
+                };
+                container.appendChild(div);
+            });
+        }
+
+        window.removeOverlay = function(e, index) {
+            e.stopPropagation();
+            overlays.splice(index, 1);
+            selectedOverlayIndex = -1;
+            render();
+            updateLayerControls();
+        }
+
+        // --- Interaction Logic (Drag & Resize) ---
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            // Calculate scale based on actual display size vs canvas resolution
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (evt.clientX - rect.left) * scaleX,
+                y: (evt.clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('mousedown', function(e) {
+            const pos = getMousePos(e);
+            
+            // Check if clicking an overlay (iterate reverse to click top-most)
+            let clickedIndex = -1;
+            for (let i = overlays.length - 1; i >= 0; i--) {
+                const o = overlays[i];
+                if (pos.x >= o.x && pos.x <= o.x + o.width &&
+                    pos.y >= o.y && pos.y <= o.y + o.height) {
+                    clickedIndex = i;
+                    break;
+                }
+            }
+
+            if (clickedIndex !== -1) {
+                selectedOverlayIndex = clickedIndex;
+                isDragging = true;
+                dragStartX = pos.x - overlays[clickedIndex].x;
+                dragStartY = pos.y - overlays[clickedIndex].y;
+                render();
+                updateLayerControls();
+            } else {
+                // Deselect if clicking background
+                selectedOverlayIndex = -1;
+                render();
+                updateLayerControls();
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            if (isDragging && selectedOverlayIndex !== -1) {
+                const pos = getMousePos(e);
+                const overlay = overlays[selectedOverlayIndex];
+                overlay.x = pos.x - dragStartX;
+                overlay.y = pos.y - dragStartY;
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', function() {
+            isDragging = false;
+        });
+        
+        canvas.addEventListener('mouseleave', function() {
+            isDragging = false;
+        });
+
+        // Touch support for mobile
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault(); // Prevent scrolling
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent("mousedown", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', function(e) {
+            e.preventDefault(); 
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent("mousemove", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', function(e) {
+            const mouseEvent = new MouseEvent("mouseup", {});
+            canvas.dispatchEvent(mouseEvent);
+        });
+
+        // Resize with Mouse Wheel
+        canvas.addEventListener('wheel', function(e) {
+            if (selectedOverlayIndex !== -1) {
+                e.preventDefault();
+                const overlay = overlays[selectedOverlayIndex];
+                const scaleAmount = 0.05;
+                const aspect = overlay.height / overlay.width;
+                
+                let newWidth = overlay.width;
+                
+                if (e.deltaY < 0) {
+                    // Zoom in / Make larger
+                    newWidth = overlay.width * (1 + scaleAmount);
+                } else {
+                    // Zoom out / Make smaller
+                    newWidth = overlay.width * (1 - scaleAmount);
+                }
+
+                // Limit sizes
+                if (newWidth > 20 && newWidth < canvas.width) {
+                    overlay.width = newWidth;
+                    overlay.height = newWidth * aspect;
+                    render();
+                }
+            }
+        }, { passive: false });
+
+
+        // --- Output Functions ---
+
+        async function downloadPDF() {
+            if (!background) {
+                alert("Please upload a main document first.");
+                return;
+            }
+
+            // Temporarily hide selection borders for the capture
+            const tempSelection = selectedOverlayIndex;
+            selectedOverlayIndex = -1;
+            render();
+
+            // Setup jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'p',
+                unit: 'pt',
+                format: 'letter' // 612 x 792 points
+            });
+
+            // Add the image
+            const imgData = canvas.toDataURL('image/jpeg', 0.85); // Quality 0.85
+            doc.addImage(imgData, 'JPEG', 0, 0, 612, 792);
+
+            // Generate filename based on subject or date
+            const subject = document.getElementById('subject-input').value || 'scanned_record';
+            const filename = `${subject.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+            
+            doc.save(filename);
+
+            // Restore selection
+            selectedOverlayIndex = tempSelection;
+            render();
+        }
+
+        function composeEmail() {
+            const email = document.getElementById('email-input').value;
+            const subject = document.getElementById('subject-input').value;
+            const body = "Please find the attached patient record and insurance information.";
+            
+            if (!email) {
+                alert("Please enter a recipient email address.");
+                document.getElementById('email-input').focus();
+                return;
+            }
+
+            // Create mailto link
+            const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.location.href = mailtoLink;
+        }
+
+        // Initial render
+        render();
+
+    </script>
+</body>
+</html>
