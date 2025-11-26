@@ -13,10 +13,7 @@
         .canvas-container {
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             cursor: crosshair;
-            touch-action: none; /* Prevent scrolling while dragging on touch devices */
-        }
-        .control-panel {
-            transition: all 0.3s ease;
+            touch-action: none;
         }
         input[type="file"] {
             display: none;
@@ -29,13 +26,33 @@
             border-radius: 0.375rem;
             transition: background-color 0.2s;
         }
+        /* Loader styles */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col md:flex-row overflow-hidden">
 
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex flex-col items-center justify-center text-white">
+        <div class="loader mb-4"></div>
+        <p class="text-lg font-semibold">Processing Image...</p>
+        <p class="text-sm opacity-75">Please wait, this may take a moment.</p>
+    </div>
+
     <!-- Sidebar / Controls -->
-    <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl">
-        <div class="p-6 border-b border-gray-100 bg-blue-600 text-white">
+    <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden">
+        <div class="p-6 border-b border-gray-100 bg-blue-600 text-white flex-shrink-0">
             <h1 class="text-xl font-bold flex items-center gap-2">
                 <i data-lucide="file-stack"></i> Record Composer
             </h1>
@@ -51,9 +68,10 @@
                 <!-- Main Doc Upload -->
                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Main Document (Background)</label>
-                    <label for="main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
+                    <label for="main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 active:bg-blue-50">
                         <i data-lucide="camera" class="w-4 h-4 mr-2"></i> Take Photo
                     </label>
+                    <!-- Added capture="environment" for rear camera priority -->
                     <input id="main-doc" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'background')">
                 </div>
 
@@ -61,14 +79,14 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                         <label class="block text-xs font-medium text-gray-700 mb-2">Patient ID</label>
-                        <label for="id-card" class="custom-file-upload w-full justify-center text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100">
+                        <label for="id-card" class="custom-file-upload w-full justify-center text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 active:bg-blue-200">
                             <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap ID
                         </label>
                         <input id="id-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'ID Card')">
                     </div>
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                         <label class="block text-xs font-medium text-gray-700 mb-2">Insurance</label>
-                        <label for="ins-card" class="custom-file-upload w-full justify-center text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
+                        <label for="ins-card" class="custom-file-upload w-full justify-center text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 active:bg-green-200">
                             <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap Card
                         </label>
                         <input id="ins-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'Insurance')">
@@ -98,15 +116,17 @@
                     <input type="text" id="subject-input" value="Patient Record Scan" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
             </div>
-
+            
+            <!-- Extra padding for mobile scrolling -->
+            <div class="h-20 md:hidden"></div>
         </div>
 
         <!-- Footer Actions -->
-        <div class="p-6 bg-gray-50 border-t border-gray-200 space-y-3">
-            <button onclick="downloadPDF()" class="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors shadow-lg">
+        <div class="p-6 bg-gray-50 border-t border-gray-200 space-y-3 flex-shrink-0 z-20">
+            <button onclick="downloadPDF()" class="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white py-3 px-4 rounded-lg font-medium transition-colors shadow-lg active:scale-95 transform transition-transform">
                 <i data-lucide="download"></i> Download PDF
             </button>
-            <button onclick="composeEmail()" class="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3 px-4 rounded-lg font-medium transition-colors">
+            <button onclick="composeEmail()" class="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3 px-4 rounded-lg font-medium transition-colors active:scale-95 transform transition-transform">
                 <i data-lucide="mail"></i> Open Email Draft
             </button>
             <p class="text-[10px] text-center text-gray-400">
@@ -118,13 +138,14 @@
     <!-- Main Canvas Area -->
     <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden">
         <!-- Canvas wrapper to center it -->
-        <div class="relative shadow-2xl bg-white">
+        <div class="relative shadow-2xl bg-white max-w-full max-h-full overflow-auto">
             <canvas id="composer-canvas"></canvas>
             
             <!-- Empty State Placeholder -->
-            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none p-4 text-center">
                 <i data-lucide="scan" class="w-16 h-16 mb-4 opacity-20"></i>
-                <p class="text-lg font-medium opacity-40">Upload Main Document to Start</p>
+                <p class="text-lg font-medium opacity-40">Take Main Photo to Start</p>
+                <p class="text-xs opacity-30 mt-2">Use landscape for best results</p>
             </div>
         </div>
     </div>
@@ -137,6 +158,7 @@
         const canvas = document.getElementById('composer-canvas');
         const ctx = canvas.getContext('2d');
         const emptyState = document.getElementById('empty-state');
+        const loadingOverlay = document.getElementById('loading-overlay');
         
         // Canvas sizing (Letter size at roughly 72 DPI screen view, we scale up for PDF)
         // 8.5 x 11 ratio
@@ -146,8 +168,30 @@
         
         canvas.width = BASE_WIDTH * SCALE_FACTOR;
         canvas.height = BASE_HEIGHT * SCALE_FACTOR;
-        canvas.style.width = `${BASE_WIDTH}px`; // CSS display size
-        canvas.style.height = `${BASE_HEIGHT}px`; // CSS display size
+        
+        // Responsive CSS sizing
+        function resizeCanvasCSS() {
+             // Basic aspect ratio maintenance
+            const container = canvas.parentElement.parentElement;
+            const maxWidth = container.clientWidth - 40;
+            const maxHeight = container.clientHeight - 40;
+            
+            const aspect = BASE_WIDTH / BASE_HEIGHT;
+            
+            let cssWidth = maxWidth;
+            let cssHeight = maxWidth / aspect;
+            
+            if (cssHeight > maxHeight) {
+                cssHeight = maxHeight;
+                cssWidth = maxHeight * aspect;
+            }
+            
+            canvas.style.width = `${cssWidth}px`;
+            canvas.style.height = `${cssHeight}px`;
+        }
+        
+        window.addEventListener('resize', resizeCanvasCSS);
+        resizeCanvasCSS(); // Init
 
         // State objects
         let background = null; // The main doc
@@ -174,7 +218,7 @@
                 ctx.strokeStyle = '#e5e7eb';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(0, 0, canvas.width, canvas.height);
-                return; // Don't draw overlays if no background (optional design choice, but safer)
+                return; 
             }
 
             // Draw Overlays
@@ -199,7 +243,7 @@
                     
                     // Draw resize handles (visual only for now, wheel handles resize)
                     ctx.fillStyle = "#2563eb";
-                    const handleSize = 8;
+                    const handleSize = 10; // Bigger for touch
                     ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
                     ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
                 }
@@ -213,16 +257,22 @@
             const file = event.target.files[0];
             if (!file) return;
 
+            // Show Loading
+            loadingOverlay.classList.remove('hidden');
+
             const reader = new FileReader();
+            
             reader.onload = function(e) {
                 const img = new Image();
                 img.onload = function() {
+                    // Hide Loading
+                    loadingOverlay.classList.add('hidden');
+                    
                     if (type === 'background') {
                         background = img;
                         render();
                     } else {
-                        // Intelligent placement logic based on count
-                        // Default size: 40% of canvas width
+                        // Intelligent placement logic
                         const defaultWidth = canvas.width * 0.4;
                         const ratio = img.height / img.width;
                         const defaultHeight = defaultWidth * ratio;
@@ -230,7 +280,6 @@
                         let startX = 20;
                         let startY = 20;
 
-                        // Try to place ID cards to the right, Insurance to the bottom right (mimicking example)
                         if (label.includes('ID')) {
                             startX = canvas.width - defaultWidth - 40;
                             startY = canvas.height * 0.3; 
@@ -248,13 +297,28 @@
                             height: defaultHeight,
                             label: label
                         });
-                        selectedOverlayIndex = overlays.length - 1; // Select the new one
+                        selectedOverlayIndex = overlays.length - 1; 
                         updateLayerControls();
                         render();
                     }
+                    // Reset input so same file can be selected again if needed
+                    event.target.value = '';
                 };
+                
+                img.onerror = function() {
+                    loadingOverlay.classList.add('hidden');
+                    alert("Failed to load image. Please try a different photo.");
+                };
+
                 img.src = e.target.result;
             };
+            
+            reader.onerror = function() {
+                loadingOverlay.classList.add('hidden');
+                alert("Error reading file. Please try again.");
+            };
+
+            // Read the file
             reader.readAsDataURL(file);
         }
 
@@ -298,19 +362,25 @@
 
         function getMousePos(evt) {
             const rect = canvas.getBoundingClientRect();
-            // Calculate scale based on actual display size vs canvas resolution
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
+            
+            // Handle both touch and mouse
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+
             return {
-                x: (evt.clientX - rect.left) * scaleX,
-                y: (evt.clientY - rect.top) * scaleY
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
             };
         }
 
-        canvas.addEventListener('mousedown', function(e) {
+        function handleStart(e) {
+             // Prevent default only if inside canvas to prevent scrolling while dragging
+             // But we need to be careful not to block scrolling entirely on page
+            
             const pos = getMousePos(e);
             
-            // Check if clicking an overlay (iterate reverse to click top-most)
             let clickedIndex = -1;
             for (let i = overlays.length - 1; i >= 0; i--) {
                 const o = overlays[i];
@@ -322,6 +392,7 @@
             }
 
             if (clickedIndex !== -1) {
+                e.preventDefault(); // Lock scroll when dragging an item
                 selectedOverlayIndex = clickedIndex;
                 isDragging = true;
                 dragStartX = pos.x - overlays[clickedIndex].x;
@@ -329,56 +400,38 @@
                 render();
                 updateLayerControls();
             } else {
-                // Deselect if clicking background
+                // Background click - don't prevent default so user can scroll page
                 selectedOverlayIndex = -1;
                 render();
                 updateLayerControls();
             }
-        });
+        }
 
-        canvas.addEventListener('mousemove', function(e) {
+        function handleMove(e) {
             if (isDragging && selectedOverlayIndex !== -1) {
+                e.preventDefault(); // Stop scrolling while dragging
                 const pos = getMousePos(e);
                 const overlay = overlays[selectedOverlayIndex];
                 overlay.x = pos.x - dragStartX;
                 overlay.y = pos.y - dragStartY;
                 render();
             }
-        });
+        }
 
-        canvas.addEventListener('mouseup', function() {
+        function handleEnd() {
             isDragging = false;
-        });
-        
-        canvas.addEventListener('mouseleave', function() {
-            isDragging = false;
-        });
+        }
 
-        // Touch support for mobile
-        canvas.addEventListener('touchstart', function(e) {
-            e.preventDefault(); // Prevent scrolling
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent("mousedown", {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
-        }, { passive: false });
+        // Mouse Events
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('mouseleave', handleEnd);
 
-        canvas.addEventListener('touchmove', function(e) {
-            e.preventDefault(); 
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent("mousemove", {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
-        }, { passive: false });
-
-        canvas.addEventListener('touchend', function(e) {
-            const mouseEvent = new MouseEvent("mouseup", {});
-            canvas.dispatchEvent(mouseEvent);
-        });
+        // Touch Events
+        canvas.addEventListener('touchstart', handleStart, { passive: false });
+        canvas.addEventListener('touchmove', handleMove, { passive: false });
+        canvas.addEventListener('touchend', handleEnd);
 
         // Resize with Mouse Wheel
         canvas.addEventListener('wheel', function(e) {
@@ -391,14 +444,11 @@
                 let newWidth = overlay.width;
                 
                 if (e.deltaY < 0) {
-                    // Zoom in / Make larger
                     newWidth = overlay.width * (1 + scaleAmount);
                 } else {
-                    // Zoom out / Make smaller
                     newWidth = overlay.width * (1 - scaleAmount);
                 }
 
-                // Limit sizes
                 if (newWidth > 20 && newWidth < canvas.width) {
                     overlay.width = newWidth;
                     overlay.height = newWidth * aspect;
@@ -407,41 +457,46 @@
             }
         }, { passive: false });
 
-
         // --- Output Functions ---
 
         async function downloadPDF() {
             if (!background) {
-                alert("Please upload a main document first.");
+                alert("Please take a photo of the main document first.");
                 return;
             }
 
-            // Temporarily hide selection borders for the capture
-            const tempSelection = selectedOverlayIndex;
-            selectedOverlayIndex = -1;
-            render();
-
-            // Setup jsPDF
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({
-                orientation: 'p',
-                unit: 'pt',
-                format: 'letter' // 612 x 792 points
-            });
-
-            // Add the image
-            const imgData = canvas.toDataURL('image/jpeg', 0.85); // Quality 0.85
-            doc.addImage(imgData, 'JPEG', 0, 0, 612, 792);
-
-            // Generate filename based on subject or date
-            const subject = document.getElementById('subject-input').value || 'scanned_record';
-            const filename = `${subject.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+            loadingOverlay.classList.remove('hidden');
             
-            doc.save(filename);
+            // Allow UI to update before blocking thread
+            setTimeout(() => {
+                try {
+                    const tempSelection = selectedOverlayIndex;
+                    selectedOverlayIndex = -1;
+                    render();
 
-            // Restore selection
-            selectedOverlayIndex = tempSelection;
-            render();
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF({
+                        orientation: 'p',
+                        unit: 'pt',
+                        format: 'letter'
+                    });
+
+                    const imgData = canvas.toDataURL('image/jpeg', 0.80);
+                    doc.addImage(imgData, 'JPEG', 0, 0, 612, 792);
+
+                    const subject = document.getElementById('subject-input').value || 'scanned_record';
+                    const filename = `${subject.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+                    
+                    doc.save(filename);
+
+                    selectedOverlayIndex = tempSelection;
+                    render();
+                } catch (err) {
+                    alert("Error creating PDF: " + err.message);
+                } finally {
+                    loadingOverlay.classList.add('hidden');
+                }
+            }, 100);
         }
 
         function composeEmail() {
@@ -455,12 +510,10 @@
                 return;
             }
 
-            // Create mailto link
             const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             window.location.href = mailtoLink;
         }
 
-        // Initial render
         render();
 
     </script>
