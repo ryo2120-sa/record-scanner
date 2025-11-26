@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Patient Record Composer 1.3</title>
+    <title>Patient Record Composer 1.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Icons -->
@@ -15,9 +15,17 @@
             cursor: crosshair;
             touch-action: none;
         }
-        input[type="file"] {
-            display: none;
+        
+        /* FIX 1.4: Don't use display:none, use opacity hack for better mobile support */
+        .hidden-input {
+            opacity: 0;
+            position: absolute;
+            z-index: -1;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
         }
+
         .custom-file-upload {
             display: inline-flex;
             align-items: center;
@@ -25,7 +33,10 @@
             cursor: pointer;
             border-radius: 0.375rem;
             transition: background-color 0.2s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
+        
         /* Loader styles */
         .loader {
             border: 4px solid #f3f3f3;
@@ -51,15 +62,15 @@
     </div>
 
     <!-- Sidebar / Controls -->
-    <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden">
-        <div class="p-6 border-b border-gray-100 bg-indigo-700 text-white flex-shrink-0">
+    <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden relative">
+        <div class="p-6 border-b border-gray-100 bg-emerald-700 text-white flex-shrink-0">
             <h1 class="text-xl font-bold flex items-center gap-2">
-                <i data-lucide="file-stack"></i> Record Composer 1.3
+                <i data-lucide="file-stack"></i> Record Composer 1.4
             </h1>
-            <p class="text-indigo-100 text-sm mt-1">Faster Processing Engine</p>
+            <p class="text-emerald-100 text-sm mt-1">Debug Mode Enabled</p>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
             
             <!-- Step 1: Photos -->
             <div class="space-y-4">
@@ -68,39 +79,36 @@
                 <!-- Main Doc Upload -->
                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Main Document (Background)</label>
-                    <label for="main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 active:bg-blue-50">
+                    <label for="input-main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 active:bg-blue-50">
                         <i data-lucide="camera" class="w-4 h-4 mr-2"></i> Take Photo
                     </label>
-                    <!-- IMPORTANT: Using standard file input behavior for max compatibility -->
-                    <input id="main-doc" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'background')">
+                    <input id="input-main-doc" class="hidden-input" type="file" accept="image/*" capture="environment">
                 </div>
 
                 <!-- Overlays -->
                 <div class="grid grid-cols-2 gap-2">
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                         <label class="block text-xs font-medium text-gray-700 mb-2">Patient ID</label>
-                        <label for="id-card" class="custom-file-upload w-full justify-center text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 active:bg-blue-200">
+                        <label for="input-id-card" class="custom-file-upload w-full justify-center text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 active:bg-blue-200">
                             <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap ID
                         </label>
-                        <input id="id-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'ID Card')">
+                        <input id="input-id-card" class="hidden-input" type="file" accept="image/*" capture="environment">
                     </div>
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
                         <label class="block text-xs font-medium text-gray-700 mb-2">Insurance</label>
-                        <label for="ins-card" class="custom-file-upload w-full justify-center text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 active:bg-green-200">
+                        <label for="input-ins-card" class="custom-file-upload w-full justify-center text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 active:bg-green-200">
                             <i data-lucide="camera" class="w-3 h-3 mr-1"></i> Snap Card
                         </label>
-                        <input id="ins-card" type="file" accept="image/*" capture="environment" onchange="handleImageUpload(event, 'overlay', 'Insurance')">
+                        <input id="input-ins-card" class="hidden-input" type="file" accept="image/*" capture="environment">
                     </div>
                 </div>
 
-                <p class="text-xs text-gray-400 italic">
-                    Tip: Drag images on the canvas to position them. Scroll/Pinch to resize overlays.
-                </p>
-
-                <!-- Layer Controls (Dynamic) -->
-                <div id="layer-controls" class="space-y-2 hidden">
-                    <h3 class="text-xs font-semibold text-gray-500 mt-4">Active Overlays</h3>
-                    <!-- JS will populate this -->
+                <!-- Debug Log Area -->
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <h3 class="text-xs font-bold text-gray-400 mb-2">SYSTEM LOG (For Troubleshooting)</h3>
+                    <div id="debug-log" class="bg-black text-green-400 text-[10px] font-mono p-2 h-32 overflow-y-auto rounded shadow-inner whitespace-pre-wrap">
+                        > App initialized...
+                    </div>
                 </div>
             </div>
 
@@ -117,7 +125,6 @@
                 </div>
             </div>
             
-            <!-- Extra padding for mobile scrolling -->
             <div class="h-20 md:hidden"></div>
         </div>
 
@@ -129,15 +136,11 @@
             <button onclick="composeEmail()" class="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3 px-4 rounded-lg font-medium transition-colors active:scale-95 transform transition-transform">
                 <i data-lucide="mail"></i> Open Email Draft
             </button>
-            <p class="text-[10px] text-center text-gray-400">
-                * Note: Download PDF first, then attach to email manually.
-            </p>
         </div>
     </div>
 
     <!-- Main Canvas Area -->
     <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden">
-        <!-- Canvas wrapper to center it -->
         <div class="relative shadow-2xl bg-white max-w-full max-h-full overflow-auto">
             <canvas id="composer-canvas"></canvas>
             
@@ -145,19 +148,61 @@
             <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none p-4 text-center">
                 <i data-lucide="scan" class="w-16 h-16 mb-4 opacity-20"></i>
                 <p class="text-lg font-medium opacity-40">Take Main Photo to Start</p>
-                <p class="text-xs opacity-30 mt-2">Use landscape for best results</p>
+                <p class="text-xs opacity-30 mt-2">Check log if camera fails</p>
             </div>
         </div>
     </div>
 
     <script>
-        // Global Error Handler to catch anything
+        // --- LOGGER UTILITY ---
+        function log(msg) {
+            const el = document.getElementById('debug-log');
+            if(el) {
+                const time = new Date().toLocaleTimeString().split(' ')[0];
+                el.innerHTML += `\n[${time}] ${msg}`;
+                el.scrollTop = el.scrollHeight; // Auto scroll
+            }
+            console.log(msg);
+        }
+
+        // Global Error Handler
         window.onerror = function(message, source, lineno, colno, error) {
-            alert("App Error: " + message);
+            log(`ERROR: ${message}`);
+            alert(`App Error: ${message}`);
         };
 
         // Initialize Icons
-        lucide.createIcons();
+        try {
+            lucide.createIcons();
+            log("Icons loaded");
+        } catch(e) {
+            log("Icon load failed: " + e.message);
+        }
+
+        // --- Event Binding (FIX 1.4) ---
+        // We bind listeners in JS, not HTML, for better reliability
+        document.addEventListener('DOMContentLoaded', () => {
+            log("DOM Ready. Binding inputs...");
+            
+            const bindInput = (id, type, label) => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.addEventListener('click', () => {
+                        log(`Input Clicked: ${label}`);
+                    });
+                    el.addEventListener('change', (e) => {
+                        log(`Change Event Fired: ${label}`);
+                        handleImageUpload(e, type, label);
+                    });
+                } else {
+                    log(`ERROR: Could not find input ${id}`);
+                }
+            };
+
+            bindInput('input-main-doc', 'background', 'Main Doc');
+            bindInput('input-id-card', 'overlay', 'ID Card');
+            bindInput('input-ins-card', 'overlay', 'Insurance');
+        });
 
         // --- App State ---
         const canvas = document.getElementById('composer-canvas');
@@ -166,7 +211,6 @@
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
         
-        // Canvas sizing
         const BASE_WIDTH = 612;
         const BASE_HEIGHT = 792;
         const SCALE_FACTOR = 1.5;
@@ -174,29 +218,23 @@
         canvas.width = BASE_WIDTH * SCALE_FACTOR;
         canvas.height = BASE_HEIGHT * SCALE_FACTOR;
         
-        // Responsive CSS sizing
         function resizeCanvasCSS() {
             const container = canvas.parentElement.parentElement;
             if(!container) return;
             const maxWidth = container.clientWidth - 40;
             const maxHeight = container.clientHeight - 40;
-            
             const aspect = BASE_WIDTH / BASE_HEIGHT;
-            
             let cssWidth = maxWidth;
             let cssHeight = maxWidth / aspect;
-            
             if (cssHeight > maxHeight) {
                 cssHeight = maxHeight;
                 cssWidth = maxHeight * aspect;
             }
-            
             canvas.style.width = `${cssWidth}px`;
             canvas.style.height = `${cssHeight}px`;
         }
         
         window.addEventListener('resize', resizeCanvasCSS);
-        // Delay initial resize to ensure DOM is ready
         setTimeout(resizeCanvasCSS, 100);
 
         let background = null;
@@ -219,7 +257,6 @@
                 ctx.strokeStyle = '#e5e7eb';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(0, 0, canvas.width, canvas.height);
-                // Don't return here, allows other logic to run if needed, but for now we stop overlays
                 if(!background) return; 
             }
 
@@ -229,7 +266,6 @@
                 ctx.shadowBlur = 10;
                 ctx.shadowOffsetX = 2;
                 ctx.shadowOffsetY = 2;
-
                 ctx.drawImage(overlay.img, overlay.x, overlay.y, overlay.width, overlay.height);
 
                 if (index === selectedOverlayIndex) {
@@ -237,9 +273,8 @@
                     ctx.strokeStyle = "#2563eb";
                     ctx.lineWidth = 4;
                     ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
-                    
                     ctx.fillStyle = "#2563eb";
-                    const handleSize = 10;
+                    const handleSize = 15; // Bigger touch target
                     ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
                     ctx.fillRect(overlay.x + overlay.width - handleSize, overlay.y + overlay.height - handleSize, handleSize*2, handleSize*2);
                 }
@@ -247,31 +282,33 @@
             });
         }
 
-        // --- 1.3 Update: High Performance Image Handling ---
+        // --- Image Handling ---
 
         function handleImageUpload(event, type, label = '') {
             try {
-                const file = event.target.files[0];
-                if (!file) {
-                    // User cancelled camera
+                const files = event.target.files;
+                log(`Files detected: ${files.length}`);
+
+                if (files.length === 0) {
+                    log("User cancelled selection or no file.");
                     return; 
                 }
+                
+                const file = files[0];
+                log(`File Type: ${file.type}, Size: ${(file.size/1024/1024).toFixed(2)}MB`);
 
-                // Immediate feedback
                 loadingText.innerText = "Processing Photo...";
                 loadingOverlay.classList.remove('hidden');
 
-                // METHOD 1.3: Use ObjectURL (Zero memory copy) instead of FileReader (Big memory copy)
                 const objectUrl = URL.createObjectURL(file);
                 
                 const img = new Image();
                 img.onload = function() {
+                    log("Image loaded into memory. Resizing...");
                     loadingText.innerText = "Resizing...";
                     
-                    // Small delay to let UI render the text change
                     requestAnimationFrame(() => {
                         try {
-                            // Resize Logic
                             const MAX_DIM = 1200; 
                             let w = img.width;
                             let h = img.height;
@@ -288,43 +325,41 @@
                             const tempCtx = tempCvs.getContext('2d');
                             tempCtx.drawImage(img, 0, 0, w, h);
 
-                            // Release original high-res memory immediately
                             URL.revokeObjectURL(objectUrl);
 
-                            // Create optimized image
                             const optimizedImg = new Image();
                             optimizedImg.onload = function() {
+                                log("Optimized image ready. Rendering.");
                                 processOptimizedImage(optimizedImg, type, label);
                                 loadingOverlay.classList.add('hidden');
                             };
-                            optimizedImg.onerror = function() {
-                                alert("Failed to process optimized image.");
+                            optimizedImg.onerror = function(e) {
+                                log("Error loading optimized image.");
                                 loadingOverlay.classList.add('hidden');
                             };
-                            
-                            // Convert to JPEG at 80% quality
                             optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.80);
 
                         } catch (err) {
-                            alert("Resize Error: " + err.message);
+                            log("Resize Error: " + err.message);
                             loadingOverlay.classList.add('hidden');
                         }
                     });
                 };
 
                 img.onerror = function(e) {
+                    log("Error loading raw image (Blob URL).");
                     loadingOverlay.classList.add('hidden');
-                    alert("Error loading image from camera. Please try again.");
+                    alert("Error loading image. Please try again.");
                 };
 
                 img.src = objectUrl;
                 
-                // Clear input to allow retaking same photo
+                // Clear input
                 event.target.value = '';
 
             } catch (err) {
+                log("Upload Handler Error: " + err.message);
                 loadingOverlay.classList.add('hidden');
-                alert("Upload Error: " + err.message);
             }
         }
 
@@ -358,37 +393,8 @@
                     label: label
                 });
                 selectedOverlayIndex = overlays.length - 1; 
-                updateLayerControls();
                 render();
             }
-        }
-
-        function updateLayerControls() {
-            const container = document.getElementById('layer-controls');
-            container.innerHTML = '<h3 class="text-xs font-semibold text-gray-500 mt-4 mb-2">Overlays (Select to Resize)</h3>';
-            
-            if (overlays.length > 0) {
-                container.classList.remove('hidden');
-            } else {
-                container.classList.add('hidden');
-            }
-
-            overlays.forEach((overlay, index) => {
-                const div = document.createElement('div');
-                div.className = `flex items-center justify-between p-2 rounded text-sm cursor-pointer ${index === selectedOverlayIndex ? 'bg-blue-100 border-blue-200 border' : 'bg-white border border-gray-200'}`;
-                div.innerHTML = `
-                    <span class="truncate font-medium ${index === selectedOverlayIndex ? 'text-blue-700' : 'text-gray-700'}">${overlay.label}</span>
-                    <button class="text-red-400 hover:text-red-600 p-1" onclick="removeOverlay(event, ${index})">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                    </button>
-                `;
-                div.onclick = () => {
-                    selectedOverlayIndex = index;
-                    render();
-                    updateLayerControls();
-                };
-                container.appendChild(div);
-            });
         }
 
         window.removeOverlay = function(e, index) {
@@ -396,19 +402,16 @@
             overlays.splice(index, 1);
             selectedOverlayIndex = -1;
             render();
-            updateLayerControls();
         }
 
-        // --- Interaction Logic (Drag & Resize) ---
+        // --- Interaction Logic ---
 
         function getMousePos(evt) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            
             const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
             const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-
             return {
                 x: (clientX - rect.left) * scaleX,
                 y: (clientY - rect.top) * scaleY
@@ -417,7 +420,6 @@
 
         function handleStart(e) {
             const pos = getMousePos(e);
-            
             let clickedIndex = -1;
             for (let i = overlays.length - 1; i >= 0; i--) {
                 const o = overlays[i];
@@ -427,20 +429,16 @@
                     break;
                 }
             }
-
             if (clickedIndex !== -1) {
-                // Prevent default ONLY if we clicked an object (stops scroll)
                 e.preventDefault(); 
                 selectedOverlayIndex = clickedIndex;
                 isDragging = true;
                 dragStartX = pos.x - overlays[clickedIndex].x;
                 dragStartY = pos.y - overlays[clickedIndex].y;
                 render();
-                updateLayerControls();
             } else {
                 selectedOverlayIndex = -1;
                 render();
-                updateLayerControls();
             }
         }
 
@@ -459,33 +457,26 @@
             isDragging = false;
         }
 
-        // Mouse Events
         canvas.addEventListener('mousedown', handleStart);
         canvas.addEventListener('mousemove', handleMove);
         canvas.addEventListener('mouseup', handleEnd);
         canvas.addEventListener('mouseleave', handleEnd);
-
-        // Touch Events
         canvas.addEventListener('touchstart', handleStart, { passive: false });
         canvas.addEventListener('touchmove', handleMove, { passive: false });
         canvas.addEventListener('touchend', handleEnd);
 
-        // Resize with Mouse Wheel
         canvas.addEventListener('wheel', function(e) {
             if (selectedOverlayIndex !== -1) {
                 e.preventDefault();
                 const overlay = overlays[selectedOverlayIndex];
                 const scaleAmount = 0.05;
                 const aspect = overlay.height / overlay.width;
-                
                 let newWidth = overlay.width;
-                
                 if (e.deltaY < 0) {
                     newWidth = overlay.width * (1 + scaleAmount);
                 } else {
                     newWidth = overlay.width * (1 - scaleAmount);
                 }
-
                 if (newWidth > 20 && newWidth < canvas.width) {
                     overlay.width = newWidth;
                     overlay.height = newWidth * aspect;
@@ -501,34 +492,25 @@
                 alert("Please take a photo of the main document first.");
                 return;
             }
-
             loadingText.innerText = "Generating PDF...";
             loadingOverlay.classList.remove('hidden');
-            
             setTimeout(() => {
                 try {
                     const tempSelection = selectedOverlayIndex;
                     selectedOverlayIndex = -1;
                     render();
-
                     const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF({
-                        orientation: 'p',
-                        unit: 'pt',
-                        format: 'letter'
-                    });
-
+                    const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'letter' });
                     const imgData = canvas.toDataURL('image/jpeg', 0.80);
                     doc.addImage(imgData, 'JPEG', 0, 0, 612, 792);
-
                     const subject = document.getElementById('subject-input').value || 'scanned_record';
                     const filename = `${subject.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
-                    
                     doc.save(filename);
-
                     selectedOverlayIndex = tempSelection;
                     render();
+                    log("PDF Generated: " + filename);
                 } catch (err) {
+                    log("PDF Error: " + err.message);
                     alert("Error creating PDF: " + err.message);
                 } finally {
                     loadingOverlay.classList.add('hidden');
@@ -540,18 +522,16 @@
             const email = document.getElementById('email-input').value;
             const subject = document.getElementById('subject-input').value;
             const body = "Please find the attached patient record and insurance information.";
-            
             if (!email) {
                 alert("Please enter a recipient email address.");
                 document.getElementById('email-input').focus();
                 return;
             }
-
-            const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = mailtoLink;
+            window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
 
         render();
+        log("App Ready.");
     </script>
 </body>
 </html>
