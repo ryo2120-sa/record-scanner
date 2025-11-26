@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Patient Record Composer 1.6</title>
+    <title>Patient Record Composer 1.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
         .canvas-container {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             cursor: crosshair;
             touch-action: none;
+            /* FIX 1.7: Ensure container has background even if canvas is invisible */
+            background-color: white; 
         }
         
         .hidden-input {
@@ -53,7 +56,7 @@
 <body class="h-screen flex flex-col md:flex-row overflow-hidden">
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex flex-col items-center justify-center text-white px-4 text-center">
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex flex-col items-center justify-center text-white px-4 text-center">
         <div class="loader mb-4"></div>
         <p class="text-lg font-semibold" id="loading-text">Processing Image...</p>
         <p class="text-sm opacity-75 mt-2">Please wait...</p>
@@ -61,14 +64,14 @@
 
     <!-- Sidebar / Controls -->
     <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden relative">
-        <div class="p-6 border-b border-gray-100 bg-rose-700 text-white flex-shrink-0 flex justify-between items-center">
+        <div class="p-6 border-b border-gray-100 bg-orange-700 text-white flex-shrink-0 flex justify-between items-center">
             <div>
                 <h1 class="text-xl font-bold flex items-center gap-2">
-                    <i data-lucide="file-stack"></i> v1.6
+                    <i data-lucide="file-stack"></i> v1.7
                 </h1>
-                <p class="text-rose-100 text-sm mt-1">Direct Draw Mode</p>
+                <p class="text-orange-100 text-sm mt-1">Layout Fix</p>
             </div>
-            <button onclick="forceRedraw()" class="bg-rose-800 p-2 rounded hover:bg-rose-900 text-xs border border-rose-600">
+            <button onclick="forceRedraw()" class="bg-orange-800 p-2 rounded hover:bg-orange-900 text-xs border border-orange-600">
                 REFRESH
             </button>
         </div>
@@ -110,7 +113,7 @@
                 <div class="mt-4 pt-4 border-t border-gray-200">
                     <h3 class="text-xs font-bold text-gray-400 mb-2">SYSTEM LOG</h3>
                     <div id="debug-log" class="bg-black text-green-400 text-[10px] font-mono p-2 h-32 overflow-y-auto rounded shadow-inner whitespace-pre-wrap">
-                        > App 1.6 initialized...
+                        > App 1.7 initialized...
                     </div>
                 </div>
             </div>
@@ -143,11 +146,11 @@
     </div>
 
     <!-- Main Canvas Area -->
-    <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden">
-        <!-- Canvas wrapper -->
-        <div class="relative shadow-2xl bg-white max-w-full max-h-full overflow-auto border border-gray-300">
-            <canvas id="composer-canvas"></canvas>
-            <!-- REMOVED HTML EMPTY STATE OVERLAY -->
+    <!-- FIX 1.7: Added min-h-[60vh] to prevent collapse -->
+    <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden min-h-[60vh]">
+        <div id="canvas-wrapper" class="relative shadow-2xl bg-white max-w-full max-h-full overflow-auto border border-gray-300 flex items-center justify-center">
+            <!-- Canvas is initialized with explicit size styles -->
+            <canvas id="composer-canvas" style="width: 300px; height: 400px; background-color: white;"></canvas>
         </div>
     </div>
 
@@ -208,16 +211,21 @@
         
         // --- RESIZING LOGIC ---
         function resizeCanvasCSS() {
-            const container = canvas.parentElement.parentElement;
+            // FIX 1.7: Use wrapper, not double parent
+            const wrapper = document.getElementById('canvas-wrapper');
+            const container = wrapper.parentElement;
+            
             if(!container) return;
+            
             const maxWidth = container.clientWidth - 40;
             const maxHeight = container.clientHeight - 40;
             const aspect = BASE_WIDTH / BASE_HEIGHT;
             let cssWidth = maxWidth;
             let cssHeight = maxWidth / aspect;
             
-            if (cssWidth < 100) cssWidth = 300; // Safety min width
-            if (cssHeight < 100) cssHeight = 400; // Safety min height
+            // Safety: Ensure we don't end up with 0 or negative
+            if (cssWidth < 50) cssWidth = 300; 
+            if (cssHeight < 50) cssHeight = 400; 
 
             if (cssHeight > maxHeight && maxHeight > 50) {
                 cssHeight = maxHeight;
@@ -227,7 +235,7 @@
             canvas.style.width = `${cssWidth}px`;
             canvas.style.height = `${cssHeight}px`;
             
-            // Sync internal resolution to base resolution
+            // Sync internal resolution
             if(canvas.width !== BASE_WIDTH) {
                 canvas.width = BASE_WIDTH;
                 canvas.height = BASE_HEIGHT;
@@ -250,18 +258,26 @@
             render();
         }
 
-        // --- RENDER LOOP 1.6 (Direct Draw) ---
+        // --- RENDER LOOP 1.7 ---
         function render() {
             try {
+                // Check if canvas has collapsed
+                if (canvas.style.width === "0px" || canvas.style.height === "0px") {
+                    log("WARNING: Canvas was 0px. Forcing size.");
+                    canvas.style.width = "300px";
+                    canvas.style.height = "400px";
+                }
+
                 // Clear Canvas
                 ctx.fillStyle = "#FFFFFF";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 if (background) {
                     // Draw Background Image
+                    log(`Drawing BG: ${background.width}x${background.height}`);
                     ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
                 } else {
-                    // Draw Empty State Text DIRECTLY ON CANVAS
+                    // Draw Placeholder
                     ctx.save();
                     ctx.strokeStyle = '#e5e7eb';
                     ctx.lineWidth = 4;
@@ -300,11 +316,6 @@
                     }
                     ctx.restore();
                 });
-                
-                // Log effective size to confirm visibility
-                if(Math.random() > 0.9) { // Don't spam log
-                   log(`Rendered. Vis Size: ${canvas.clientWidth}x${canvas.clientHeight}`);
-                }
 
             } catch (e) {
                 log(`RENDER ERROR: ${e.message}`);
