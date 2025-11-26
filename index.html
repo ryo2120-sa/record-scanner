@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Patient Record Composer 1.7</title>
+    <title>Patient Record Composer 1.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- OCR Library -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <!-- Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -15,7 +17,6 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             cursor: crosshair;
             touch-action: none;
-            /* FIX 1.7: Ensure container has background even if canvas is invisible */
             background-color: white; 
         }
         
@@ -58,21 +59,21 @@
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex flex-col items-center justify-center text-white px-4 text-center">
         <div class="loader mb-4"></div>
-        <p class="text-lg font-semibold" id="loading-text">Processing Image...</p>
-        <p class="text-sm opacity-75 mt-2">Please wait...</p>
+        <p class="text-lg font-semibold" id="loading-text">Processing...</p>
+        <p class="text-sm opacity-75 mt-2" id="loading-subtext">Please wait...</p>
     </div>
 
     <!-- Sidebar / Controls -->
     <div class="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-xl overflow-hidden relative">
-        <div class="p-6 border-b border-gray-100 bg-orange-700 text-white flex-shrink-0 flex justify-between items-center">
+        <div class="p-6 border-b border-gray-100 bg-slate-800 text-white flex-shrink-0 flex justify-between items-center">
             <div>
                 <h1 class="text-xl font-bold flex items-center gap-2">
-                    <i data-lucide="file-stack"></i> v1.7
+                    <i data-lucide="scan-text"></i> v1.8
                 </h1>
-                <p class="text-orange-100 text-sm mt-1">Layout Fix</p>
+                <p class="text-slate-300 text-sm mt-1">OCR & Flattening</p>
             </div>
-            <button onclick="forceRedraw()" class="bg-orange-800 p-2 rounded hover:bg-orange-900 text-xs border border-orange-600">
-                REFRESH
+            <button onclick="forceRedraw()" class="bg-slate-700 p-2 rounded hover:bg-slate-600 text-xs border border-slate-500">
+                RESET
             </button>
         </div>
 
@@ -80,15 +81,21 @@
             
             <!-- Step 1: Photos -->
             <div class="space-y-4">
-                <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">1. Take Photos</h2>
+                <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">1. Scan Document</h2>
                 
                 <!-- Main Doc Upload -->
                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Main Document (Background)</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Main Document</label>
                     <label for="input-main-doc" class="custom-file-upload w-full justify-center bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 active:bg-blue-50">
                         <i data-lucide="camera" class="w-4 h-4 mr-2"></i> Take Photo
                     </label>
                     <input id="input-main-doc" class="hidden-input" type="file" accept="image/*" capture="environment">
+                    
+                    <!-- Flatten Toggle -->
+                    <div class="mt-3 flex items-center gap-2">
+                        <input type="checkbox" id="scan-filter-toggle" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" checked onchange="toggleScanFilter()">
+                        <label for="scan-filter-toggle" class="text-xs text-gray-600 select-none">Apply "Scanned Doc" Filter (B&W)</label>
+                    </div>
                 </div>
 
                 <!-- Overlays -->
@@ -109,11 +116,20 @@
                     </div>
                 </div>
 
+                <!-- OCR Action -->
+                <div class="pt-2">
+                    <button onclick="runOCR()" class="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 py-2 px-4 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">
+                        <i data-lucide="text-select"></i> Extract Text (OCR)
+                    </button>
+                    <!-- Extracted Text Area -->
+                    <textarea id="ocr-result" class="w-full mt-2 p-2 text-xs border border-gray-300 rounded bg-white h-24 hidden" placeholder="Extracted text will appear here..."></textarea>
+                </div>
+                
                 <!-- Debug Log Area -->
                 <div class="mt-4 pt-4 border-t border-gray-200">
                     <h3 class="text-xs font-bold text-gray-400 mb-2">SYSTEM LOG</h3>
-                    <div id="debug-log" class="bg-black text-green-400 text-[10px] font-mono p-2 h-32 overflow-y-auto rounded shadow-inner whitespace-pre-wrap">
-                        > App 1.7 initialized...
+                    <div id="debug-log" class="bg-black text-green-400 text-[10px] font-mono p-2 h-24 overflow-y-auto rounded shadow-inner whitespace-pre-wrap">
+                        > App 1.8 initialized...
                     </div>
                 </div>
             </div>
@@ -146,10 +162,8 @@
     </div>
 
     <!-- Main Canvas Area -->
-    <!-- FIX 1.7: Added min-h-[60vh] to prevent collapse -->
     <div class="flex-1 bg-gray-200 flex items-center justify-center p-4 relative overflow-hidden min-h-[60vh]">
         <div id="canvas-wrapper" class="relative shadow-2xl bg-white max-w-full max-h-full overflow-auto border border-gray-300 flex items-center justify-center">
-            <!-- Canvas is initialized with explicit size styles -->
             <canvas id="composer-canvas" style="width: 300px; height: 400px; background-color: white;"></canvas>
         </div>
     </div>
@@ -183,15 +197,10 @@
             const bindInput = (id, type, label) => {
                 const el = document.getElementById(id);
                 if(el) {
-                    el.addEventListener('click', () => {
-                        log(`Input Clicked: ${label}`);
-                    });
                     el.addEventListener('change', (e) => {
-                        log(`Change Event Fired: ${label}`);
+                        log(`Change Event: ${label}`);
                         handleImageUpload(e, type, label);
                     });
-                } else {
-                    log(`ERROR: Could not find input ${id}`);
                 }
             };
 
@@ -205,13 +214,13 @@
         const ctx = canvas.getContext('2d');
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
+        const loadingSubtext = document.getElementById('loading-subtext');
         
         const BASE_WIDTH = 612;
         const BASE_HEIGHT = 792;
         
         // --- RESIZING LOGIC ---
         function resizeCanvasCSS() {
-            // FIX 1.7: Use wrapper, not double parent
             const wrapper = document.getElementById('canvas-wrapper');
             const container = wrapper.parentElement;
             
@@ -223,7 +232,6 @@
             let cssWidth = maxWidth;
             let cssHeight = maxWidth / aspect;
             
-            // Safety: Ensure we don't end up with 0 or negative
             if (cssWidth < 50) cssWidth = 300; 
             if (cssHeight < 50) cssHeight = 400; 
 
@@ -235,7 +243,6 @@
             canvas.style.width = `${cssWidth}px`;
             canvas.style.height = `${cssHeight}px`;
             
-            // Sync internal resolution
             if(canvas.width !== BASE_WIDTH) {
                 canvas.width = BASE_WIDTH;
                 canvas.height = BASE_HEIGHT;
@@ -246,6 +253,7 @@
         setTimeout(resizeCanvasCSS, 500); 
 
         let background = null;
+        let originalBackground = null; // Store original color version
         let overlays = [];
         let selectedOverlayIndex = -1;
         let isDragging = false;
@@ -253,31 +261,63 @@
         let dragStartY = 0;
 
         function forceRedraw() {
-            log("Force Redraw Triggered");
             resizeCanvasCSS();
             render();
         }
 
-        // --- RENDER LOOP 1.7 ---
+        // --- Flattening / Filter Logic ---
+        function toggleScanFilter() {
+            const isChecked = document.getElementById('scan-filter-toggle').checked;
+            if (!originalBackground) return;
+
+            if (isChecked) {
+                applyScanFilter(originalBackground).then(filteredImg => {
+                    background = filteredImg;
+                    render();
+                });
+            } else {
+                background = originalBackground;
+                render();
+            }
+        }
+
+        function applyScanFilter(sourceImg) {
+            return new Promise((resolve) => {
+                const tempCvs = document.createElement('canvas');
+                tempCvs.width = sourceImg.width;
+                tempCvs.height = sourceImg.height;
+                const tempCtx = tempCvs.getContext('2d');
+                
+                // Draw original
+                tempCtx.drawImage(sourceImg, 0, 0);
+                
+                // CSS Filters are faster than pixel manipulation
+                // Grayscale + High Contrast to simulate document scan
+                tempCtx.globalCompositeOperation = 'copy';
+                tempCtx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
+                tempCtx.drawImage(sourceImg, 0, 0);
+                tempCtx.filter = 'none'; // reset
+
+                const newImg = new Image();
+                newImg.onload = () => resolve(newImg);
+                newImg.src = tempCvs.toDataURL('image/jpeg', 0.8);
+            });
+        }
+
+        // --- RENDER LOOP ---
         function render() {
             try {
-                // Check if canvas has collapsed
-                if (canvas.style.width === "0px" || canvas.style.height === "0px") {
-                    log("WARNING: Canvas was 0px. Forcing size.");
+                if (canvas.style.width === "0px") {
                     canvas.style.width = "300px";
                     canvas.style.height = "400px";
                 }
 
-                // Clear Canvas
                 ctx.fillStyle = "#FFFFFF";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 if (background) {
-                    // Draw Background Image
-                    log(`Drawing BG: ${background.width}x${background.height}`);
                     ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
                 } else {
-                    // Draw Placeholder
                     ctx.save();
                     ctx.strokeStyle = '#e5e7eb';
                     ctx.lineWidth = 4;
@@ -288,13 +328,11 @@
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.fillText("Take Main Photo", canvas.width / 2, canvas.height / 2);
-                    
                     ctx.font = "20px sans-serif";
                     ctx.fillText("Camera will open automatically", canvas.width / 2, (canvas.height / 2) + 40);
                     ctx.restore();
                 }
 
-                // Draw Overlays
                 overlays.forEach((overlay, index) => {
                     ctx.save();
                     ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
@@ -308,7 +346,6 @@
                         ctx.strokeStyle = "#2563eb";
                         ctx.lineWidth = 4;
                         ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
-                        
                         ctx.fillStyle = "#2563eb";
                         const handleSize = 15;
                         ctx.fillRect(overlay.x - handleSize, overlay.y - handleSize, handleSize*2, handleSize*2);
@@ -319,7 +356,57 @@
 
             } catch (e) {
                 log(`RENDER ERROR: ${e.message}`);
-                alert(`Render Error: ${e.message}`);
+            }
+        }
+
+        // --- OCR Logic ---
+        async function runOCR() {
+            if (!background) {
+                alert("Please take a main document photo first.");
+                return;
+            }
+
+            const textArea = document.getElementById('ocr-result');
+            textArea.value = "";
+            textArea.classList.remove('hidden');
+            
+            loadingText.innerText = "Running OCR...";
+            loadingSubtext.innerText = "Initializing Tesseract Engine (can take 10s)...";
+            loadingOverlay.classList.remove('hidden');
+
+            try {
+                // We use the canvas content for OCR (this includes current filter)
+                // BUT we should exclude the stickers (ID cards) if we just want the doc text?
+                // For now, let's OCR the background image specifically to be cleaner.
+                
+                const worker = await Tesseract.createWorker('eng', 1, {
+                  logger: m => {
+                      log(`OCR: ${m.status} (${(m.progress * 100).toFixed(0)}%)`);
+                      if(m.status === 'recognizing text') {
+                          loadingSubtext.innerText = `Reading text: ${(m.progress * 100).toFixed(0)}%`;
+                      }
+                  }
+                });
+                
+                // Convert background image object to URL for Tesseract
+                // Use a temporary canvas to get data URL of the filtered background
+                const tempCvs = document.createElement('canvas');
+                tempCvs.width = background.width;
+                tempCvs.height = background.height;
+                tempCvs.getContext('2d').drawImage(background, 0, 0);
+                const dataUrl = tempCvs.toDataURL('image/jpeg');
+
+                const { data: { text } } = await worker.recognize(dataUrl);
+                
+                log("OCR Complete.");
+                textArea.value = text;
+                await worker.terminate();
+                
+            } catch (err) {
+                log("OCR Error: " + err.message);
+                textArea.value = "Error extracting text: " + err.message;
+            } finally {
+                loadingOverlay.classList.add('hidden');
             }
         }
 
@@ -331,17 +418,14 @@
                 if (files.length === 0) return;
                 
                 const file = files[0];
-                log(`File: ${file.type} (${(file.size/1024/1024).toFixed(2)}MB)`);
-
                 loadingText.innerText = "Processing...";
+                loadingSubtext.innerText = "Optimizing image...";
                 loadingOverlay.classList.remove('hidden');
 
                 const objectUrl = URL.createObjectURL(file);
-                
                 const img = new Image();
+                
                 img.onload = function() {
-                    log("Img loaded. Resizing...");
-                    
                     setTimeout(() => { 
                         try {
                             const MAX_DIM = 1200; 
@@ -364,27 +448,16 @@
 
                             const optimizedImg = new Image();
                             optimizedImg.onload = function() {
-                                log("Optimized Img Ready.");
                                 processOptimizedImage(optimizedImg, type, label);
                                 loadingOverlay.classList.add('hidden');
-                                log("Sequence Complete.");
                             };
-                            optimizedImg.onerror = function(e) {
-                                log("Error loading optimized image.");
-                                loadingOverlay.classList.add('hidden');
-                            };
-                            optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.80);
+                            optimizedImg.src = tempCvs.toDataURL('image/jpeg', 0.85);
 
                         } catch (err) {
                             log("Resize Error: " + err.message);
                             loadingOverlay.classList.add('hidden');
                         }
                     }, 50);
-                };
-
-                img.onerror = function(e) {
-                    log("Error loading raw blob.");
-                    loadingOverlay.classList.add('hidden');
                 };
                 img.src = objectUrl;
                 event.target.value = '';
@@ -396,12 +469,25 @@
         }
 
         function processOptimizedImage(img, type, label) {
-            log(`Processing: ${type}`);
             if (type === 'background') {
-                background = img;
-                resizeCanvasCSS(); 
-                render();
+                originalBackground = img; // Save raw
+                
+                // Check if filter is active
+                const isFilterOn = document.getElementById('scan-filter-toggle').checked;
+                if (isFilterOn) {
+                    loadingText.innerText = "Flattening...";
+                    applyScanFilter(img).then(filtered => {
+                        background = filtered;
+                        resizeCanvasCSS(); 
+                        render();
+                    });
+                } else {
+                    background = img;
+                    resizeCanvasCSS(); 
+                    render();
+                }
             } else {
+                // ... same overlay logic ...
                 const defaultWidth = canvas.width * 0.4;
                 const ratio = img.height / img.width;
                 const defaultHeight = defaultWidth * ratio;
@@ -524,6 +610,7 @@
                 return;
             }
             loadingText.innerText = "Generating PDF...";
+            loadingSubtext.innerText = "";
             loadingOverlay.classList.remove('hidden');
             setTimeout(() => {
                 try {
@@ -539,9 +626,7 @@
                     doc.save(filename);
                     selectedOverlayIndex = tempSelection;
                     render();
-                    log("PDF Generated: " + filename);
                 } catch (err) {
-                    log("PDF Error: " + err.message);
                     alert("Error creating PDF: " + err.message);
                 } finally {
                     loadingOverlay.classList.add('hidden');
@@ -561,10 +646,8 @@
             window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
 
-        // Init
         render();
         log("App Ready.");
-
     </script>
 </body>
 </html>
